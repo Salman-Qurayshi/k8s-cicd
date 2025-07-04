@@ -76,38 +76,38 @@ jobs:
         cache-to: type=gha,mode=max
 
   deploy:
-  needs: build-and-push
-  runs-on: self-hosted
-  if: github.ref == 'refs/heads/main'
-  steps:
-  - name: Checkout code
-    uses: actions/checkout@v4
+    needs: build-and-push
+    runs-on: self-hosted
+    if: github.ref == 'refs/heads/main'
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-  - name: Setup kubectl
-    uses: azure/setup-kubectl@v3
-    with:
-      version: 'v1.28.0'
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.28.0'
 
-  - name: Configure kubectl
-    run: |
-      mkdir -p $HOME/.kube
-      echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+    - name: Configure kubectl
+      run: |
+        mkdir -p $HOME/.kube
+        echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
 
-  - name: Update deployment image
-    run: |
-      FULL_IMAGE_NAME_WITH_TAG="${{ needs.build-and-push.outputs.image-tag }}"
-      echo "Attempting to replace 'image: cicd-app:latest' with: image: $FULL_IMAGE_NAME_WITH_TAG"
-      sed -i "s|image: cicd-app:latest|image: $FULL_IMAGE_NAME_WITH_TAG|g" k8s-manifests/deployment.yaml
+    - name: Update deployment image
+      run: |
+        FULL_IMAGE_NAME_WITH_TAG="${{ needs.build-and-push.outputs.image-tag }}"
+        echo "Attempting to replace 'image: cicd-app:latest' with: image: $FULL_IMAGE_NAME_WITH_TAG"
+        sed -i "s|image: cicd-app:latest|image: $FULL_IMAGE_NAME_WITH_TAG|g" k8s-manifests/deployment.yaml
 
-  - name: Debug - Show updated deployment.yaml 
-    run: cat k8s-manifests/deployment.yaml
+    - name: Debug - Show updated deployment.yaml 
+      run: cat k8s-manifests/deployment.yaml
 
-  - name: Deploy to Kubernetes
-    run: |
-      kubectl apply -f k8s-manifests/
-      kubectl rollout status deployment/cicd-app --timeout=300s
+    - name: Deploy to Kubernetes
+      run: |
+        kubectl apply -f k8s-manifests/
+        kubectl rollout status deployment/cicd-app --timeout=300s
 
-  - name: Verify deployment
-    run: |
-      kubectl get pods -l app=cicd-app
-      kubectl get services cicd-app-service
+    - name: Verify deployment
+      run: |
+        kubectl get pods -l app=cicd-app
+        kubectl get services cicd-app-service
