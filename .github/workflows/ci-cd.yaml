@@ -37,7 +37,7 @@ jobs:
     runs-on: self-hosted
     if: github.ref == 'refs/heads/main'
     outputs:
-      image-tag: ${{ steps.meta.outputs.tags }} # ADDED/CORRECTED: Outputting all generated tags
+      image-tag: ${{ steps.meta.outputs.tags }}
       image-digest: ${{ steps.build.outputs.digest }}
     steps:
     - name: Checkout code
@@ -60,7 +60,7 @@ jobs:
         tags: |
           type=ref,event=branch
           type=ref,event=pr
-          type=sha,prefix={{branch}}- # This generates tags like 'main-SHORT_SHA'
+          type=sha,prefix={{branch}}-
           type=raw,value=latest,enable={{is_default_branch}}
 
     - name: Build and push Docker image
@@ -93,33 +93,74 @@ jobs:
         mkdir -p $HOME/.kube
         echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
 
-    - name: Update deployment image and APP_VERSION # Consolidated and corrected logic
+    - name: Update deployment image and APP_VERSION (with extensive debug)
       run: |
+        # 1. Get the full comma-separated list of tags from the build job
         ALL_GENERATED_TAGS="${{ needs.build-and-push.outputs.image-tag }}"
-        echo "DEBUG: All generated tags from build job: $ALL_GENERATED_TAGS"
+        echo "DEBUG: Raw ALL_GENERATED_TAGS from build job output: '$ALL_GENERATED_TAGS'"
 
-        SPECIFIC_IMAGE_TAG=$(echo "$ALL_GENERATED_TAGS" | grep -o "docker\.io/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:main-[a-f0-9]\+")
+        # --- Begin Debugging Section ---
 
-
-        if [ -z "$SPECIFIC_IMAGE_TAG" ]; then
-            echo "WARN: grep -o did not find specific tag. Falling back to last tag in list."
-            SPECIFIC_IMAGE_TAG=$(echo "$ALL_GENERATED_TAGS" | rev | cut -d',' -f1 | rev)
+        # Check if ALL_GENERATED_TAGS is empty and fail early if so
+        if [ -z "$ALL_GENERATED_TAGS" ]; then
+            echo "ERROR: ALL_GENERATED_TAGS is empty. This means the 'build-and-push' job did not provide image tags."
+            echo "Please check the 'build-and-push' job logs, specifically the 'Extract metadata' step, for errors."
+            exit 1
         fi
 
-        echo "DEBUG: Specific image tag extracted for deployment: $SPECIFIC_IMAGE_TAG"
+        # 2. Attempt to extract the specific SHA-based tag (e.g., 'docker.io/youruser/cicd-app:main-e193956')
+        # This is more robust by looking for the image name and the SHA suffix.
+        # This avoids issues with DOCKER_USERNAME redaction in the grep pattern itself.
+        SPECIFIC_IMAGE_TAG=$(echo "$ALL_GENERATED_TAGS" | grep -o "${{ env.IMAGE_NAME }}:main-[a-f0-9]\+" | sed "s|^|${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/|")
+        echo "DEBUG: Initial SPECIFIC_IMAGE_TAG (after grep/sed attempt): '$SPECIFIC_IMAGE_TAG'"
 
+        # Fallback if the refined grep also fails
+        if [ -z "$SPECIFIC_IMAGE_TAG" ]; then
+            echo "WARN: Refined grep -o did not find specific tag. Attempting fallback to last tag in list."
+            LAST_TAG=$(echo "$ALL_GENERATED_TAGS" | rev | cut -d',' -f1 | rev)
+            echo "DEBUG: Fallback - Last tag found: '$LAST_TAG'"
+
+            # Ensure the fallback tag is the one we expect (contains 'main-' and a short SHA)
+            if echo "$LAST_TAG" | grep -q "${{ env.IMAGE_NAME }}:main-[a-f0-9]\+"; then
+                SPECIFIC_IMAGE_TAG="$LAST_TAG"
+                echo "DEBUG: Fallback successful. SPECIFIC_IMAGE_TAG: '$SPECIFIC_IMAGE_TAG'"
+            else
+                echo "ERROR: Fallback tag ('$LAST_TAG') is not the expected SHA-based tag (e.g., 'cicd-app:main-sha'). This is unexpected and crucial."
+                exit 1 # Fail the job if we can't find a reliable tag
+            fi
+        fi
+
+        echo "DEBUG: Final determined SPECIFIC_IMAGE_TAG for deployment: '$SPECIFIC_IMAGE_TAG'"
+
+        # Check if SPECIFIC_IMAGE_TAG is still empty after all attempts
+        if [ -z "$SPECIFIC_IMAGE_TAG" ]; then
+            echo "FATAL ERROR: SPECIFIC_IMAGE_TAG could not be determined. Aborting deployment."
+            exit 1
+        fi
+
+        # 3. Use the extracted tag directly as the FULL_IMAGE_NAME
         FULL_IMAGE_NAME="$SPECIFIC_IMAGE_TAG"
-        echo "DEBUG: Final Image String for Deployment: $FULL_IMAGE_NAME"
+        echo "DEBUG: Final FULL_IMAGE_NAME string for 'image:' field: '$FULL_IMAGE_NAME'"
 
+        # 4. Update the 'image:' line in k8s-manifests/deployment.yaml
+        echo "INFO: Updating 'image:' in k8s-manifests/deployment.yaml to '$FULL_IMAGE_NAME'"
         sed -i "s|image: cicd-app:latest|image: $FULL_IMAGE_NAME|g" k8s-manifests/deployment.yaml
+        
+        # 5. Extract just the short SHA for the APP_VERSION environment variable
+        APP_VERSION_SHA=$(echo "$SPECIFIC_IMAGE_TAG" | sed "s|.*main-||")
+        echo "DEBUG: Extracted APP_VERSION_SHA for 'value:' field: '$APP_VERSION_SHA'"
 
-        APP_VERSION_SHA=$(echo "$SPECIFIC_IMAGE_TAG" | sed "s|docker\.io/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:main-||")
-        echo "DEBUG: APP_VERSION to set: $APP_VERSION_SHA"
-
+        # 6. Update the 'APP_VERSION' value in k8s-manifests/deployment.yaml
+        echo "INFO: Updating 'APP_VERSION' in k8s-manifests/deployment.yaml to '$APP_VERSION_SHA'"
         sed -i "s|value: \"1.0.0\"|value: \"$APP_VERSION_SHA\"|g" k8s-manifests/deployment.yaml
 
-    - name: Debug - Show updated deployment.yaml 
-      run: cat k8s-manifests/deployment.yaml
+        # --- End Debugging Section ---
+
+    - name: Debug - Show updated deployment.yaml
+      run: |
+        echo "--- Contents of k8s-manifests/deployment.yaml after updates ---"
+        cat k8s-manifests/deployment.yaml
+        echo "---------------------------------------------------------------"
 
     - name: Deploy to Kubernetes
       run: |
