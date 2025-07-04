@@ -4,7 +4,7 @@ const port = 3000;
 
 app.get('/', (req, res) => {
   res.json({
-    message: 'Hello from Kubernetes CI/CD Pipeline!',
+    message: 'Hello from Kubernetes CI/CD Pipeline!, Version 1.1.0',
     version: process.env.APP_VERSION || '1.1.0',
     timestamp: new Date().toISOString()
   });
