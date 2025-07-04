@@ -92,7 +92,7 @@ The CI/CD pipeline is orchestrated using GitHub Actions.
 3.  **Connect Self-Hosted GitHub Actions Runner:**
     Follow GitHub's official documentation to set up and connect a self-hosted runner to your repository. Ensure it's running and listening for jobs.
     
-    ![Runner-configured](screenshots/github-runner-cli.png)
+    ![Runner-configured](screenshot/github-runner-cli.png)
     
 
 5.  **Configure GitHub Repository Secrets:**
@@ -141,7 +141,8 @@ The CI/CD pipeline is orchestrated using GitHub Actions.
   
       
     * **Screenshots:**
-      ![Pipeline Jobs](screenshots/pipeline-jobs.png)
+      
+      ![Pipeline Jobs](screenshot/pipeline-jobs.png)
 
-      ![Cli+web-browser](screenshots/cli-web-browser.png)
+      ![Cli+web-browser](screenshot/cli-web-browser.png)
 
