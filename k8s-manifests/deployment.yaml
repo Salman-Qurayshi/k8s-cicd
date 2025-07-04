@@ -34,16 +34,3 @@ spec:
             port: 3000
           initialDelaySeconds: 5
           periodSeconds: 5
-EOFcat > k8s-manifests/service.yaml << 'EOF'
-apiVersion: v1
-kind: Service
-metadata:
-  name: cicd-app-service
-spec:
-  selector:
-    app: cicd-app
-  ports:
-    - protocol: TCP
-      port: 80
-      targetPort: 3000
-  type: LoadBalancer
