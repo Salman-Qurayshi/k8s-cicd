@@ -98,6 +98,8 @@ jobs:
 
         echo "DEBUG: Determined Branch Name: '$BRANCH_NAME'"
 
+        BRANCH_NAME="${{ github.ref_name }}"
+
         SPECIFIC_TAG_SUFFIX="${BRANCH_NAME}-${SHORT_SHA}"
         echo "DEBUG: Constructed Specific Tag Suffix: '$SPECIFIC_TAG_SUFFIX'"
 
