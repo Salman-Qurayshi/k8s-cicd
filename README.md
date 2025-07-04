@@ -146,3 +146,12 @@ The CI/CD pipeline is orchestrated using GitHub Actions.
 
       ![Cli+web-browser](screenshot/cli-web-browser.png)
 
+      
+
+## Key Learnings & Challenges Faced
+* **End-to-End Automation:** I successfully implemented a fully automated pipeline from code commit to Kubernetes deployment, which was a core objective.
+* **Immutable Image Tagging:** A significant learning was understanding and implementing the critical importance of using unique, immutable Docker image tags based on Git SHAs (e.g., `main-e193956`). This ensures that each deployment is tied to a specific, verifiable code state, preventing common issues that can arise from using mutable tags like `latest`.
+* **Robust Data Flow in GitHub Actions:** I initially faced challenges in reliably passing the dynamically generated Docker image tag from the `build-and-push` job to the `deploy` job using `needs.outputs`. The robust solution I found and implemented involved recalculating the exact image tag directly within the `deploy` job itself, utilizing GitHub's `github.sha` and `github.ref_name` context variables. This approach proved more resilient and ensured consistency, especially across different workflow runs.
+* **Self-Hosted Runner Benefits:** I gained practical experience in configuring and operating a self-hosted runner, which was valuable for understanding its advantages in specific build environments or for managing resource needs.
+* **Kubernetes Integration:** I solidified my understanding of how `kubectl` commands are effectively orchestrated within CI/CD workflows to manage Kubernetes deployments, services, and perform crucial operations like rollout monitoring and rollbacks.
+* **Operational Resilience:** Through this project, I gained hands-on experience in implementing and testing both manual and automated rollback strategies. This highlighted their immense importance in ensuring high availability and quick recovery from deployment failures or unforeseen production issue
