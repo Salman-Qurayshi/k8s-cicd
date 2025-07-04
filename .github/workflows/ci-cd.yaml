@@ -37,7 +37,6 @@ jobs:
     runs-on: self-hosted
     if: github.ref == 'refs/heads/main'
     outputs:
-      image-tag: ${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
       image-digest: ${{ steps.build.outputs.digest }}
     steps:
     - name: Checkout code
@@ -95,7 +94,7 @@ jobs:
 
     - name: Update deployment image
       run: |
-        FULL_IMAGE_NAME_WITH_TAG="${{ needs.build-and-push.outputs.image-tag }}"
+        FULL_IMAGE_NAME_WITH_TAG="${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
         echo "Attempting to replace 'image: cicd-app:latest' with: image: $FULL_IMAGE_NAME_WITH_TAG"
         sed -i "s|image: cicd-app:latest|image: $FULL_IMAGE_NAME_WITH_TAG|g" k8s-manifests/deployment.yaml
 
