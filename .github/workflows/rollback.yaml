@@ -1,0 +1,40 @@
+name: Rollback Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: 'Revision number to rollback to (leave empty for previous)'
+        required: false
+        type: string
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.28.0'
+
+    - name: Configure kubectl
+      run: |
+        mkdir -p $HOME/.kube
+        echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+
+    - name: Rollback deployment
+      run: |
+        if [ -n "${{ github.event.inputs.revision }}" ]; then
+          kubectl rollout undo deployment/cicd-app --to-revision=${{ github.event.inputs.revision }}
+        else
+          kubectl rollout undo deployment/cicd-app
+        fi
+
+    - name: Wait for rollback completion
+      run: |
+        kubectl rollout status deployment/cicd-app --timeout=300s
+
+    - name: Verify rollback
+      run: |
+        kubectl get pods -l app=cicd-app
+        kubectl describe deployment cicd-app
