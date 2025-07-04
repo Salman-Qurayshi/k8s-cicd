@@ -37,7 +37,7 @@ jobs:
     runs-on: self-hosted
     if: github.ref == 'refs/heads/main'
     outputs:
-      image-tag: ${{ steps.meta.outputs.tags }}
+      image-tag: ${{ steps.meta.outputs.tags }} # ADDED/CORRECTED: Outputting all generated tags
       image-digest: ${{ steps.build.outputs.digest }}
     steps:
     - name: Checkout code
@@ -60,7 +60,7 @@ jobs:
         tags: |
           type=ref,event=branch
           type=ref,event=pr
-          type=sha,prefix={{branch}}-
+          type=sha,prefix={{branch}}- # This generates tags like 'main-SHORT_SHA'
           type=raw,value=latest,enable={{is_default_branch}}
 
     - name: Build and push Docker image
@@ -93,20 +93,27 @@ jobs:
         mkdir -p $HOME/.kube
         echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
 
-    - name: Update deployment image and APP_VERSION 
+    - name: Update deployment image and APP_VERSION # Consolidated and corrected logic
       run: |
-        RAW_IMAGE_TAG_OUTPUT="${{ needs.build-and-push.outputs.image-tag }}"
-        
+        ALL_GENERATED_TAGS="${{ needs.build-and-push.outputs.image-tag }}"
+        echo "DEBUG: All generated tags from build job: $ALL_GENERATED_TAGS"
 
-        DEPLOY_IMAGE_TAG=$(echo "$RAW_IMAGE_TAG_OUTPUT" | cut -d',' -f1)
-        echo "DEBUG: Extracted deployment image tag: $DEPLOY_IMAGE_TAG"
+        SPECIFIC_IMAGE_TAG=$(echo "$ALL_GENERATED_TAGS" | grep -o "docker\.io/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:main-[a-f0-9]\+")
 
-        FULL_IMAGE_NAME="${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:$DEPLOY_IMAGE_TAG"
+
+        if [ -z "$SPECIFIC_IMAGE_TAG" ]; then
+            echo "WARN: grep -o did not find specific tag. Falling back to last tag in list."
+            SPECIFIC_IMAGE_TAG=$(echo "$ALL_GENERATED_TAGS" | rev | cut -d',' -f1 | rev)
+        fi
+
+        echo "DEBUG: Specific image tag extracted for deployment: $SPECIFIC_IMAGE_TAG"
+
+        FULL_IMAGE_NAME="$SPECIFIC_IMAGE_TAG"
         echo "DEBUG: Final Image String for Deployment: $FULL_IMAGE_NAME"
 
         sed -i "s|image: cicd-app:latest|image: $FULL_IMAGE_NAME|g" k8s-manifests/deployment.yaml
 
-        APP_VERSION_SHA=$(echo "$DEPLOY_IMAGE_TAG" | sed 's/^main-//')
+        APP_VERSION_SHA=$(echo "$SPECIFIC_IMAGE_TAG" | sed "s|docker\.io/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:main-||")
         echo "DEBUG: APP_VERSION to set: $APP_VERSION_SHA"
 
         sed -i "s|value: \"1.0.0\"|value: \"$APP_VERSION_SHA\"|g" k8s-manifests/deployment.yaml
