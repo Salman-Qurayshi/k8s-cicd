@@ -37,6 +37,7 @@ jobs:
     runs-on: self-hosted
     if: github.ref == 'refs/heads/main'
     outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
       image-digest: ${{ steps.build.outputs.digest }}
     steps:
     - name: Checkout code
@@ -92,11 +93,23 @@ jobs:
         mkdir -p $HOME/.kube
         echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
 
-    - name: Update deployment image
+    - name: Update deployment image and APP_VERSION 
       run: |
-        FULL_IMAGE_NAME_WITH_TAG="${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-        echo "Attempting to replace 'image: cicd-app:latest' with: image: $FULL_IMAGE_NAME_WITH_TAG"
-        sed -i "s|image: cicd-app:latest|image: $FULL_IMAGE_NAME_WITH_TAG|g" k8s-manifests/deployment.yaml
+        RAW_IMAGE_TAG_OUTPUT="${{ needs.build-and-push.outputs.image-tag }}"
+        
+
+        DEPLOY_IMAGE_TAG=$(echo "$RAW_IMAGE_TAG_OUTPUT" | cut -d',' -f1)
+        echo "DEBUG: Extracted deployment image tag: $DEPLOY_IMAGE_TAG"
+
+        FULL_IMAGE_NAME="${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:$DEPLOY_IMAGE_TAG"
+        echo "DEBUG: Final Image String for Deployment: $FULL_IMAGE_NAME"
+
+        sed -i "s|image: cicd-app:latest|image: $FULL_IMAGE_NAME|g" k8s-manifests/deployment.yaml
+
+        APP_VERSION_SHA=$(echo "$DEPLOY_IMAGE_TAG" | sed 's/^main-//')
+        echo "DEBUG: APP_VERSION to set: $APP_VERSION_SHA"
+
+        sed -i "s|value: \"1.0.0\"|value: \"$APP_VERSION_SHA\"|g" k8s-manifests/deployment.yaml
 
     - name: Debug - Show updated deployment.yaml 
       run: cat k8s-manifests/deployment.yaml
